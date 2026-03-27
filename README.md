@@ -1,8 +1,14 @@
 # Лабораторная работа №6 — Carsharing API
 
-## ЗиОВПО — лабораторная работа №1 (ветка `lab-1`)
+## ЗиОВПО — сдача по веткам (без Pull Request)
 
-Серверная часть перенесена из РБПО: JWT access/refresh, роли, HTTPS, PostgreSQL, `.gitlab-ci.yml` (stages `test`, `build`). Сдача — через Pull Request **`lab-1` → `main`**.
+Каждая работа — в **своей ветке**; преподаватель смотрит нужную ветку на GitHub (**branch** → выбрать `lab-1`, `lab-2`, …). Сводная таблица: [`docs/labs.md`](docs/labs.md).
+
+| Лаба | Ветка   | Содержание |
+|------|---------|------------|
+| 1    | `lab-1` | Подготовка репозитория: JWT access/refresh, роли, HTTPS, PostgreSQL, `.gitlab-ci.yml` (`test` / `build`) |
+
+Серверная часть перенесена из РБПО (Carsharing API).
 
 ---
 
