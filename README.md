@@ -1,5 +1,11 @@
 # Лабораторная работа №6 — Carsharing API
 
+## ЗиОВПО — лабораторная работа №1 (ветка `lab-1`)
+
+Серверная часть перенесена из РБПО: JWT access/refresh, роли, HTTPS, PostgreSQL, `.gitlab-ci.yml` (stages `test`, `build`). Сдача — через Pull Request **`lab-1` → `main`**.
+
+---
+
 **Предмет:** PO6  
 **Тема:** TLS/HTTPS, цепочка сертификатов, CI/CD
 
