@@ -1,0 +1,9 @@
+# Локальные настройки — скопируйте в application-local.properties (в .gitignore)
+# Укажите пароль PostgreSQL — тот же, что используете в pgAdmin
+spring.datasource.password=YOUR_DB_PASSWORD
+
+# TLS keystore (после генерации: scripts/generate-certificates.ps1)
+# Пароль — из certs\.keystore-password
+# Путь: ../certs при mvn из demo, ./certs при запуске из корня репозитория
+SSL_KEY_STORE_PATH=file:../certs/carsharing-keystore.p12
+SSL_KEY_STORE_PASSWORD=YOUR_KEYSTORE_PASSWORD
