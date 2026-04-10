@@ -3,43 +3,24 @@ stages:
   - build
 
 variables:
+  MAVEN_CLI_OPTS: "-B -e -DskipTests=false"
   MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
-  DB_HOST: "postgres"
-  DB_PORT: "5432"
-  DB_NAME: "carsharing"
-  DB_USER: "postgres"
-  DB_PASSWORD: "postgres"
-  JWT_SECRET: "ci-jwt-secret-change-me-at-least-32-characters"
 
 cache:
   paths:
     - .m2/repository
 
-.maven-job:
-  image: maven:3.9.9-eclipse-temurin-17
-  services:
-    - name: postgres:15
-      alias: postgres
-  before_script:
-    - echo "Using Maven cache in .m2/repository"
-
 test:
   stage: test
-  extends: .maven-job
+  image: maven:3.9.9-eclipse-temurin-21
   script:
-    - mvn -B clean test
-  artifacts:
-    when: always
-    reports:
-      junit:
-        - target/surefire-reports/*.xml
+    - mvn $MAVEN_CLI_OPTS test
 
 build:
   stage: build
-  extends: .maven-job
+  image: maven:3.9.9-eclipse-temurin-21
   script:
-    - mvn -B clean package -DskipTests
+    - mvn -B -DskipTests package
   artifacts:
     paths:
       - target/*.jar
-    expire_in: 7 days
