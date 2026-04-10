@@ -1,234 +1,561 @@
 {
   "info": {
-    "_postman_id": "41d58f9c-55b8-4f1a-9ae8-4f2f478802f1",
-    "name": "ZiovpoLab Task 1",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Task 1 backend checks: auth (JWT access/refresh), role-protected endpoints."
+    "name": "Ziovpo Backend API",
+    "description": "Как пользоваться\n========\n\n**Сценарий (Е2Е)** — одна папка «Сценарий (Е2Е, весь поток)»: все шаги лабы по порядку (регистрация первого админа → лицензии). Удобно запускать через **Collection Runner** только на этой папке.\n• Заполните в переменных коллекции **authPassword** (и при желании authUsername, authEmail).\n• Если в БД **уже есть** пользователи: в Runner **снимите галочку** с «01 Регистрация…» и **включите** «02 Login…» (или сначала один раз выполните Login вручную из папки «Аутентификация»).\n\n**Остальное** — папки ниже: любой запрос по отдельности (логин, refresh, второй пользователь, каталог, лицензии, устройства, проверка 403).\n\nПеременные: baseUrl, authUsername, authPassword, authEmail; для второго пользователя — userUsername, userPassword, userEmail. Токены пишутся в переменные коллекции из тестов. Первый зарегистрированный = ROLE_ADMIN.\n\nHTTPS: при самоподписанном сертификате отключите Postman → Settings → SSL certificate verification.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:8080", "type": "string"},
+    {"key": "authUsername", "value": "admin", "type": "string"},
+    {"key": "authPassword", "value": "", "type": "string"},
+    {"key": "authEmail", "value": "admin@lab.local", "type": "string"},
+    {"key": "userUsername", "value": "ivan", "type": "string"},
+    {"key": "userPassword", "value": "", "type": "string"},
+    {"key": "userEmail", "value": "ivan@lab.local", "type": "string"},
+    {"key": "accessToken", "value": "", "type": "string"},
+    {"key": "holderAccessToken", "value": "", "type": "string"},
+    {"key": "adminAccessToken", "value": "", "type": "string"},
+    {"key": "refreshToken", "value": "", "type": "string"},
+    {"key": "holderUserId", "value": "", "type": "string"},
+    {"key": "productId", "value": "", "type": "string"},
+    {"key": "licenseTypeId", "value": "", "type": "string"},
+    {"key": "licenseCode", "value": "", "type": "string"},
+    {"key": "licenseId", "value": "", "type": "string"},
+    {"key": "deviceId", "value": "", "type": "string"}
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]
   },
   "item": [
     {
-      "name": "Auth - Register",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
+      "name": "Сценарий (Е2Е, весь поток)",
+      "description": "Полный поток задания: регистрация (первый = ADMIN) **или** login → me → каталог → создание лицензии → устройство → activate → verify → renew.\n\n**Collection Runner:** выберите только эту папку. Пустая БД: оставьте 01, **отключите 02 Login**. Уже есть пользователи: **отключите 01**, **включите 02 Login**.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]
+      },
+      "item": [
+        {
+          "name": "01 Регистрация (первый = ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('holderAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('adminAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{authUsername}}\",\n  \"password\": \"{{authPassword}}\",\n  \"email\": \"{{authEmail}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register"
           }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
         },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/register",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "auth",
-            "register"
-          ]
-        }
-      },
-      "event": [
         {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status is 200', function () {",
-              "    pm.response.to.have.status(200);",
-              "});",
-              "",
-              "var json = pm.response.json();",
-              "pm.collectionVariables.set('accessToken', json.accessToken);",
-              "pm.collectionVariables.set('refreshToken', json.refreshToken);"
-            ],
-            "type": "text/javascript"
+          "name": "02 Login (если БД уже не пустая — вместо 01)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('holderAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('adminAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{authUsername}}\",\n  \"password\": \"{{authPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
           }
-        }
-      ]
-    },
-    {
-      "name": "Auth - Login",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
         },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/login",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "auth",
-            "login"
-          ]
-        }
-      },
-      "event": [
         {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status is 200', function () {",
-              "    pm.response.to.have.status(200);",
-              "});",
-              "",
-              "var json = pm.response.json();",
-              "pm.collectionVariables.set('accessToken', json.accessToken);",
-              "pm.collectionVariables.set('refreshToken', json.refreshToken);"
-            ],
-            "type": "text/javascript"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Auth - Refresh",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+          "name": "03 GET /api/me → holderUserId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('holderUserId', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/me"}
         },
-        "url": {
-          "raw": "{{baseUrl}}/api/auth/refresh",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "auth",
-            "refresh"
-          ]
-        }
-      },
-      "event": [
         {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status is 200', function () {",
-              "    pm.response.to.have.status(200);",
-              "});",
-              "",
-              "var json = pm.response.json();",
-              "pm.collectionVariables.set('accessToken', json.accessToken);"
-            ],
-            "type": "text/javascript"
+          "name": "04 POST /api/admin/catalog/products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('productId', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Demo Antivirus\"\n}"},
+            "url": "{{baseUrl}}/api/admin/catalog/products"
+          }
+        },
+        {
+          "name": "05 POST /api/admin/catalog/license-types",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('licenseTypeId', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Standard\",\n  \"defaultDurationInDays\": 365,\n  \"description\": \"1 year default\"\n}"
+            },
+            "url": "{{baseUrl}}/api/admin/catalog/license-types"
+          }
+        },
+        {
+          "name": "06 POST /api/licenses (создать)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const j = pm.response.json();",
+                  "    pm.collectionVariables.set('licenseCode', j.code);",
+                  "    pm.collectionVariables.set('licenseId', j.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{holderUserId}}\",\n  \"ownerId\": \"{{holderUserId}}\",\n  \"productId\": \"{{productId}}\",\n  \"typeId\": \"{{licenseTypeId}}\",\n  \"deviceCount\": 3,\n  \"description\": \"Lab demo license\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses"
+          }
+        },
+        {
+          "name": "07 POST /api/devices",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('deviceId', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"PC-Lab\",\n  \"macAddress\": \"00:11:22:33:44:55\"\n}"
+            },
+            "url": "{{baseUrl}}/api/devices"
+          }
+        },
+        {
+          "name": "08 POST /api/licenses/activate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j.ticket).to.exist;",
+                  "    pm.expect(j.signatureBase64).to.be.a('string');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/activate"
+          }
+        },
+        {
+          "name": "09 POST /api/licenses/verify",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/verify"
+          }
+        },
+        {
+          "name": "10 POST /api/licenses/renew",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"extendDays\": 30\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/renew"
           }
         }
       ]
     },
     {
-      "name": "API - Profile (authorized)",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{accessToken}}"
-          }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/profile",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "profile"
-          ]
-        }
-      },
-      "event": [
+      "name": "Аутентификация (по отдельности)",
+      "description": "Отдельные вызовы без прохождения всего сценария.",
+      "item": [
         {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status is 200', function () {",
-              "    pm.response.to.have.status(200);",
-              "});"
-            ],
-            "type": "text/javascript"
+          "name": "POST /api/auth/register (первый = ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('holderAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('adminAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{authUsername}}\",\n  \"password\": \"{{authPassword}}\",\n  \"email\": \"{{authEmail}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "POST /api/auth/register (USER)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('holderAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{userUsername}}\",\n  \"password\": \"{{userPassword}}\",\n  \"email\": \"{{userEmail}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "POST /api/auth/login (authUsername)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('holderAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('adminAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{authUsername}}\",\n  \"password\": \"{{authPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "POST /api/auth/login (userUsername)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('holderAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{userUsername}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "POST /api/auth/refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('holderAccessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('adminAccessToken', json.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"},
+            "url": "{{baseUrl}}/api/auth/refresh"
           }
         }
       ]
     },
     {
-      "name": "API - Admin Ping (expected 403 for ROLE_USER)",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Authorization",
-            "value": "Bearer {{accessToken}}"
-          }
-        ],
-        "url": {
-          "raw": "{{baseUrl}}/api/admin/ping",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "api",
-            "admin",
-            "ping"
-          ]
-        }
-      },
-      "event": [
+      "name": "Демо и роли (по отдельности)",
+      "description": "Нужен accessToken (после login/register).",
+      "item": [
         {
-          "listen": "test",
-          "script": {
-            "exec": [
-              "pm.test('Status is 403 for non-admin user', function () {",
-              "    pm.response.to.have.status(403);",
-              "});"
-            ],
-            "type": "text/javascript"
+          "name": "GET /api/me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('holderUserId', pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/me"}
+        },
+        {"name": "GET /api/profile", "request": {"method": "GET", "url": "{{baseUrl}}/api/profile"}},
+        {
+          "name": "GET /api/admin/ping (ожидается 200 для ADMIN)",
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/admin/ping"}
+        },
+        {
+          "name": "GET /api/admin/ping (ожидается 403 для USER)",
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/admin/ping"}
+        }
+      ]
+    },
+    {
+      "name": "Каталог admin (по отдельности)",
+      "description": "ROLE_ADMIN. Токен первого пользователя или после login authUsername.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]
+      },
+      "item": [
+        {
+          "name": "Создать продукт",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Demo Antivirus\"\n}"},
+            "url": "{{baseUrl}}/api/admin/catalog/products"
+          }
+        },
+        {
+          "name": "Создать тип лицензии",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Standard\",\n  \"defaultDurationInDays\": 365,\n  \"description\": \"1 year\"\n}"
+            },
+            "url": "{{baseUrl}}/api/admin/catalog/license-types"
           }
         }
       ]
-    }
-  ],
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:8080"
     },
     {
-      "key": "username",
-      "value": "test_user_1"
+      "name": "Лицензии (по отдельности)",
+      "description": "Подставьте UUID вручную или используйте переменные после сценария / GET me.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]
+      },
+      "item": [
+        {
+          "name": "Создать лицензию",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{holderUserId}}\",\n  \"ownerId\": \"{{holderUserId}}\",\n  \"productId\": \"{{productId}}\",\n  \"typeId\": \"{{licenseTypeId}}\",\n  \"deviceCount\": 3,\n  \"description\": \"manual\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses"
+          }
+        },
+        {
+          "name": "Активировать",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/activate"
+          }
+        },
+        {
+          "name": "Проверить",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/verify"
+          }
+        },
+        {
+          "name": "Продлить",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"extendDays\": 30\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/renew"
+          }
+        }
+      ]
     },
     {
-      "key": "password",
-      "value": "test_password_123"
-    },
-    {
-      "key": "accessToken",
-      "value": ""
-    },
-    {
-      "key": "refreshToken",
-      "value": ""
+      "name": "Устройства (по отдельности)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]
+      },
+      "item": [
+        {
+          "name": "Зарегистрировать устройство",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"PC-1\",\n  \"macAddress\": \"AA:BB:CC:DD:EE:FF\"\n}"
+            },
+            "url": "{{baseUrl}}/api/devices"
+          }
+        }
+      ]
     }
   ]
 }

@@ -1,9 +1,11 @@
 package ru.ziovpo.backend.auth;
 
 import java.time.Instant;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -12,6 +14,7 @@ import ru.ziovpo.backend.auth.dto.LoginRequest;
 import ru.ziovpo.backend.auth.dto.RefreshRequest;
 import ru.ziovpo.backend.auth.dto.RegisterRequest;
 import ru.ziovpo.backend.auth.dto.TokenResponse;
+import ru.ziovpo.backend.security.AppUserPrincipal;
 import ru.ziovpo.backend.security.JwtService;
 import ru.ziovpo.backend.user.Role;
 import ru.ziovpo.backend.user.UserEntity;
@@ -43,14 +46,15 @@ public class AuthService {
 
     @Transactional
     public TokenResponse register(RegisterRequest request) {
-        if (userRepository.existsByUsername(request.username())) {
+        if (userRepository.existsByName(request.username())) {
             throw new IllegalArgumentException("Username already exists");
         }
 
         UserEntity user = new UserEntity();
-        user.setUsername(request.username());
-        user.setPassword(passwordEncoder.encode(request.password()));
-        user.setRole(Role.ROLE_USER);
+        user.setName(request.username());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setEmail(request.email());
+        user.setRole(userRepository.count() == 0 ? Role.ROLE_ADMIN : Role.ROLE_USER);
         userRepository.save(user);
 
         return issueTokens(user);
@@ -62,7 +66,7 @@ public class AuthService {
                 new UsernamePasswordAuthenticationToken(request.username(), request.password())
         );
 
-        UserEntity user = userRepository.findByUsername(request.username())
+        UserEntity user = userRepository.findByName(request.username())
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         return issueTokens(user);
     }
@@ -78,11 +82,7 @@ public class AuthService {
         }
 
         UserEntity user = tokenEntity.getUser();
-        UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername(user.getUsername())
-                .password(user.getPassword())
-                .authorities(user.getRole().name())
-                .build();
+        UserDetails userDetails = toPrincipal(user);
 
         if (!jwtService.isRefreshTokenValid(request.refreshToken(), userDetails)) {
             throw new IllegalArgumentException("Refresh token is invalid");
@@ -93,11 +93,7 @@ public class AuthService {
     }
 
     private TokenResponse issueTokens(UserEntity user) {
-        UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername(user.getUsername())
-                .password(user.getPassword())
-                .authorities(user.getRole().name())
-                .build();
+        UserDetails userDetails = toPrincipal(user);
 
         String accessToken = jwtService.generateAccessToken(userDetails);
         String refreshToken = jwtService.generateRefreshToken(userDetails);
@@ -110,5 +106,18 @@ public class AuthService {
         refreshTokenRepository.save(entity);
 
         return new TokenResponse(accessToken, refreshToken);
+    }
+
+    private static AppUserPrincipal toPrincipal(UserEntity user) {
+        return new AppUserPrincipal(
+                user.getId(),
+                user.getName(),
+                user.getPasswordHash(),
+                List.of(new SimpleGrantedAuthority(user.getRole().name())),
+                !user.isAccountExpired(),
+                !user.isAccountLocked(),
+                !user.isCredentialsExpired(),
+                !user.isDisabled()
+        );
     }
 }

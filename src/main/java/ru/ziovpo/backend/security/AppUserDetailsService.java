@@ -1,6 +1,7 @@
 package ru.ziovpo.backend.security;
 
-import org.springframework.security.core.userdetails.User;
+import java.util.List;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -19,11 +20,17 @@ public class AppUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        UserEntity user = userRepository.findByUsername(username)
+        UserEntity user = userRepository.findByName(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        return User.withUsername(user.getUsername())
-                .password(user.getPassword())
-                .authorities(user.getRole().name())
-                .build();
+        return new AppUserPrincipal(
+                user.getId(),
+                user.getName(),
+                user.getPasswordHash(),
+                List.of(new SimpleGrantedAuthority(user.getRole().name())),
+                !user.isAccountExpired(),
+                !user.isAccountLocked(),
+                !user.isCredentialsExpired(),
+                !user.isDisabled()
+        );
     }
 }

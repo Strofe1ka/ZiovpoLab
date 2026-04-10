@@ -3,8 +3,11 @@ package ru.ziovpo.backend;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import ru.ziovpo.backend.config.LicenseProperties;
 
 @SpringBootApplication
+@EnableConfigurationProperties(LicenseProperties.class)
 public class BackendApplication {
 
     public static void main(String[] args) {

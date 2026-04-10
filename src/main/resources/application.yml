@@ -3,13 +3,27 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ziovpo}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
+  flyway:
+    enabled: true
+    # Схема public уже не пустая (старые таблицы / прошлые попытки), но нет flyway_schema_history — иначе Flyway падает.
+    baseline-on-migrate: true
+    baseline-version: 0
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: true
     open-in-view: false
+
+license:
+  ticket:
+    ttl-seconds: ${LICENSE_TICKET_TTL_SECONDS:300}
+  signing:
+    keystore-location: ${LICENSE_SIGNING_KEYSTORE:}
+    keystore-password: ${LICENSE_SIGNING_KEYSTORE_PASSWORD:}
+    key-alias: ${LICENSE_SIGNING_KEY_ALIAS:license-signing}
+    key-password: ${LICENSE_SIGNING_KEY_PASSWORD:}
 
 server:
   ssl:
