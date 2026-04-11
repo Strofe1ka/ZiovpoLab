@@ -7,3 +7,7 @@ out/
 *.log
 .env
 *.iml
+
+# Локальные сертификаты и keystore (не коммитить)
+certs/generated/
+certs/ci/

@@ -1,6 +1,6 @@
 # Ziovpo — серверная часть (Spring Boot)
 
-Структура по заданиям: каталог [docs/tasks](docs/tasks/README.md). **Задание 1** — ветка `lab-1`, описание: [docs/tasks/task-1](docs/tasks/task-1/README.md).
+Структура по заданиям: каталог [docs/tasks](docs/tasks/README.md). **Задание 1** — [task-1](docs/tasks/task-1/README.md). **TLS / CI / артефакты** — [task-2-tls-ci.md](docs/tasks/task-2-tls-ci.md). Ветка `lab-1` (или отдельная под этап).
 
 Репозиторий на GitHub: [https://github.com/Strofe1ka/ZiovpoLab](https://github.com/Strofe1ka/ZiovpoLab)
 
