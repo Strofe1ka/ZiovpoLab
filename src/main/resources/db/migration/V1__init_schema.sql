@@ -46,7 +46,7 @@ CREATE TABLE product (
 CREATE TABLE license (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code VARCHAR(64) NOT NULL UNIQUE,
-    user_id UUID NOT NULL REFERENCES users (id),
+    user_id UUID REFERENCES users (id),
     product_id UUID NOT NULL REFERENCES product (id),
     type_id UUID NOT NULL REFERENCES license_type (id),
     first_activation_date DATE,

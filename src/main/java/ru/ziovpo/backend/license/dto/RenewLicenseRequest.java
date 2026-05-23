@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 
 public record RenewLicenseRequest(
-        @NotBlank String code,
+        @NotBlank String activationKey,
         @Positive Integer extendDays
 ) {
 }

@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
 public record VerifyLicenseRequest(
-        @NotBlank String code,
-        @NotNull UUID deviceId
+        @NotBlank String deviceMac,
+        @NotNull UUID productId
 ) {
 }

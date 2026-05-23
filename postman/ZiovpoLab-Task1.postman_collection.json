@@ -21,7 +21,8 @@
     {"key": "licenseTypeId", "value": "", "type": "string"},
     {"key": "licenseCode", "value": "", "type": "string"},
     {"key": "licenseId", "value": "", "type": "string"},
-    {"key": "deviceId", "value": "", "type": "string"}
+    {"key": "deviceId", "value": "", "type": "string"},
+    {"key": "deviceMac", "value": "00:11:22:33:44:55", "type": "string"}
   ],
   "auth": {
     "type": "bearer",
@@ -30,7 +31,7 @@
   "item": [
     {
       "name": "Сценарий (Е2Е, весь поток)",
-      "description": "Полный поток задания: регистрация (первый = ADMIN) **или** login → me → каталог → создание лицензии → устройство → activate → verify → renew.\n\n**Collection Runner:** выберите только эту папку. Пустая БД: оставьте 01, **отключите 02 Login**. Уже есть пользователи: **отключите 01**, **включите 02 Login**.",
+      "description": "Полный поток: register/login → me → каталог → create (только ownerId) → activate (MAC, устройство создаётся само) → verify (MAC + productId) → renew.\n\nRunner: пустая БД — 01 без 02. Renew: в create задаётся endingDate через pre-request шага 06.",
       "auth": {
         "type": "bearer",
         "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]
@@ -161,13 +162,24 @@
           }
         },
         {
-          "name": "06 POST /api/licenses (создать)",
+          "name": "06 POST /api/licenses (создать, только owner)",
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const d = new Date();",
+                  "d.setDate(d.getDate() + 5);",
+                  "pm.collectionVariables.set('licenseEndingDate', d.toISOString().slice(0, 10));"
+                ],
+                "type": "text/javascript"
+              }
+            },
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "if (pm.response.code === 200) {",
+                  "if (pm.response.code === 201) {",
                   "    const j = pm.response.json();",
                   "    pm.collectionVariables.set('licenseCode', j.code);",
                   "    pm.collectionVariables.set('licenseId', j.id);",
@@ -182,38 +194,13 @@
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": \"{{holderUserId}}\",\n  \"ownerId\": \"{{holderUserId}}\",\n  \"productId\": \"{{productId}}\",\n  \"typeId\": \"{{licenseTypeId}}\",\n  \"deviceCount\": 3,\n  \"description\": \"Lab demo license\"\n}"
+              "raw": "{\n  \"ownerId\": \"{{holderUserId}}\",\n  \"productId\": \"{{productId}}\",\n  \"typeId\": \"{{licenseTypeId}}\",\n  \"deviceCount\": 3,\n  \"description\": \"Lab demo license\",\n  \"endingDate\": \"{{licenseEndingDate}}\"\n}"
             },
             "url": "{{baseUrl}}/api/licenses"
           }
         },
         {
-          "name": "07 POST /api/devices",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    pm.collectionVariables.set('deviceId', pm.response.json().id);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{"key": "Content-Type", "value": "application/json"}],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"PC-Lab\",\n  \"macAddress\": \"00:11:22:33:44:55\"\n}"
-            },
-            "url": "{{baseUrl}}/api/devices"
-          }
-        },
-        {
-          "name": "08 POST /api/licenses/activate",
+          "name": "07 POST /api/licenses/activate (MAC)",
           "event": [
             {
               "listen": "test",
@@ -234,31 +221,46 @@
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"deviceMac\": \"{{deviceMac}}\",\n  \"deviceName\": \"PC-Lab\"\n}"
             },
             "url": "{{baseUrl}}/api/licenses/activate"
           }
         },
         {
-          "name": "09 POST /api/licenses/verify",
+          "name": "08 POST /api/licenses/verify (MAC + product)",
           "request": {
             "method": "POST",
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+              "raw": "{\n  \"deviceMac\": \"{{deviceMac}}\",\n  \"productId\": \"{{productId}}\"\n}"
             },
             "url": "{{baseUrl}}/api/licenses/verify"
           }
         },
         {
-          "name": "10 POST /api/licenses/renew",
+          "name": "09 POST /api/licenses/renew",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j.ticket).to.exist;",
+                  "    pm.expect(j.signatureBase64).to.be.a('string');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"extendDays\": 30\n}"
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"extendDays\": 30\n}"
             },
             "url": "{{baseUrl}}/api/licenses/renew"
           }
@@ -493,7 +495,7 @@
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": \"{{holderUserId}}\",\n  \"ownerId\": \"{{holderUserId}}\",\n  \"productId\": \"{{productId}}\",\n  \"typeId\": \"{{licenseTypeId}}\",\n  \"deviceCount\": 3,\n  \"description\": \"manual\"\n}"
+              "raw": "{\n  \"ownerId\": \"{{holderUserId}}\",\n  \"productId\": \"{{productId}}\",\n  \"typeId\": \"{{licenseTypeId}}\",\n  \"deviceCount\": 3,\n  \"description\": \"manual\"\n}"
             },
             "url": "{{baseUrl}}/api/licenses"
           }
@@ -505,7 +507,7 @@
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"deviceMac\": \"{{deviceMac}}\",\n  \"deviceName\": \"PC-Lab\"\n}"
             },
             "url": "{{baseUrl}}/api/licenses/activate"
           }
@@ -517,7 +519,7 @@
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+              "raw": "{\n  \"deviceMac\": \"{{deviceMac}}\",\n  \"productId\": \"{{productId}}\"\n}"
             },
             "url": "{{baseUrl}}/api/licenses/verify"
           }
@@ -529,7 +531,7 @@
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"{{licenseCode}}\",\n  \"extendDays\": 30\n}"
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"extendDays\": 30\n}"
             },
             "url": "{{baseUrl}}/api/licenses/renew"
           }

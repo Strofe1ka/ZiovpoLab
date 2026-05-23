@@ -1,17 +1,18 @@
 package ru.ziovpo.backend.license;
 
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import ru.ziovpo.backend.license.dto.ActivateLicenseRequest;
 import ru.ziovpo.backend.license.dto.CreateLicenseRequest;
 import ru.ziovpo.backend.license.dto.LicenseCreatedResponse;
 import ru.ziovpo.backend.license.dto.RenewLicenseRequest;
-import ru.ziovpo.backend.license.dto.RenewLicenseResponse;
 import ru.ziovpo.backend.license.dto.VerifyLicenseRequest;
 import ru.ziovpo.backend.license.ticket.TicketResponse;
 import ru.ziovpo.backend.security.AppUserPrincipal;
@@ -27,6 +28,7 @@ public class LicenseController {
     }
 
     @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('ADMIN')")
     public LicenseCreatedResponse create(
             @Valid @RequestBody CreateLicenseRequest request,
@@ -52,7 +54,7 @@ public class LicenseController {
 
     @PostMapping("/renew")
     @PreAuthorize("isAuthenticated()")
-    public RenewLicenseResponse renew(
+    public TicketResponse renew(
             @Valid @RequestBody RenewLicenseRequest request,
             @AuthenticationPrincipal AppUserPrincipal principal) {
         return licenseService.renew(request, principal);

@@ -1,0 +1,470 @@
+{
+  "info": {
+    "name": "Ziovpo Lab 2 — Лицензии",
+    "description": "# Лабораторная 2 — управление лицензиями\n\n## Перед запуском\n1. Сервер: `mvn spring-boot:run` (БД **ziovpo**, Flyway V1+V2).\n2. В переменных коллекции задайте **authPassword** (и при необходимости userPassword).\n3. Пустая БД: Collection Runner → папка **«Сценарий (Е2Е)»** → включить **01**, выключить **02**.\n4. БД с пользователями: выключить **01**, включить **02 Login**.\n\n## Поток (ER / методичка)\n| Шаг | Действие |\n|-----|----------|\n| Create | Admin выпускает ключ; **user_id в БД NULL**, только **owner_id** |\n| Activate | Пользователь: **activationKey** + **deviceMac** (устройство создаётся само); заполняется **user_id** |\n| Verify | **deviceMac** + **productId** → ticket + ЭЦП |\n| Renew | **activationKey**; срок ≤ 7 дней до окончания → ticket |\n\n## Переменные\n`baseUrl`, `authPassword`, `deviceMac`, `licenseCode`, `productId`, … — заполняются тестами Е2Е.\n\nHTTPS: Settings → отключить SSL verification при самоподписанном сертификате.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:8080"},
+    {"key": "authUsername", "value": "admin"},
+    {"key": "authPassword", "value": ""},
+    {"key": "authEmail", "value": "admin@lab.local"},
+    {"key": "userUsername", "value": "ivan"},
+    {"key": "userPassword", "value": ""},
+    {"key": "userEmail", "value": "ivan@lab.local"},
+    {"key": "accessToken", "value": ""},
+    {"key": "adminAccessToken", "value": ""},
+    {"key": "holderAccessToken", "value": ""},
+    {"key": "userAccessToken", "value": ""},
+    {"key": "refreshToken", "value": ""},
+    {"key": "holderUserId", "value": ""},
+    {"key": "ownerUserId", "value": ""},
+    {"key": "productId", "value": ""},
+    {"key": "licenseTypeId", "value": ""},
+    {"key": "licenseCode", "value": ""},
+    {"key": "licenseId", "value": ""},
+    {"key": "licenseEndingDate", "value": ""},
+    {"key": "deviceMac", "value": "00:11:22:33:44:55"},
+    {"key": "deviceId", "value": ""}
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{"key": "token", "value": "{{accessToken}}"}]
+  },
+  "item": [
+    {
+      "name": "Сценарий (Е2Е, весь поток)",
+      "description": "Runner: только эта папка. Шаг 06 задаёт endingDate +5 дней (для renew).",
+      "item": [
+        {
+          "name": "01 Регистрация admin (первый = ADMIN)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('201/200 register', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                "if (pm.response.code === 200) {",
+                "  const j = pm.response.json();",
+                "  pm.collectionVariables.set('accessToken', j.accessToken);",
+                "  pm.collectionVariables.set('adminAccessToken', j.accessToken);",
+                "  pm.collectionVariables.set('holderAccessToken', j.accessToken);",
+                "  pm.collectionVariables.set('refreshToken', j.refreshToken);",
+                "}"
+              ]
+            }
+          }],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{authUsername}}\",\n  \"password\": \"{{authPassword}}\",\n  \"email\": \"{{authEmail}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "02 Login admin (вместо 01 если БД не пустая)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('200 login', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.collectionVariables.set('accessToken', j.accessToken);",
+                "pm.collectionVariables.set('adminAccessToken', j.accessToken);",
+                "pm.collectionVariables.set('holderAccessToken', j.accessToken);",
+                "pm.collectionVariables.set('refreshToken', j.refreshToken);"
+              ]
+            }
+          }],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{authUsername}}\",\n  \"password\": \"{{authPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "03 GET /api/me",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('200 me', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.collectionVariables.set('holderUserId', j.id);",
+                "pm.collectionVariables.set('ownerUserId', j.id);"
+              ]
+            }
+          }],
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/me"}
+        },
+        {
+          "name": "04 POST catalog/products",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('200 product', () => pm.response.to.have.status(200));",
+                "pm.collectionVariables.set('productId', pm.response.json().id);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Demo Antivirus\"\n}"},
+            "url": "{{baseUrl}}/api/admin/catalog/products"
+          }
+        },
+        {
+          "name": "05 POST catalog/license-types",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('200 license type', () => pm.response.to.have.status(200));",
+                "pm.collectionVariables.set('licenseTypeId', pm.response.json().id);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Standard\",\n  \"defaultDurationInDays\": 365,\n  \"description\": \"1 year\"\n}"
+            },
+            "url": "{{baseUrl}}/api/admin/catalog/license-types"
+          }
+        },
+        {
+          "name": "06 POST /api/licenses (201, user_id ещё NULL в БД)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const d = new Date();",
+                  "d.setDate(d.getDate() + 5);",
+                  "pm.collectionVariables.set('licenseEndingDate', d.toISOString().slice(0, 10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 created', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('licenseCode', j.code);",
+                  "pm.collectionVariables.set('licenseId', j.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ownerId\": \"{{ownerUserId}}\",\n  \"productId\": \"{{productId}}\",\n  \"typeId\": \"{{licenseTypeId}}\",\n  \"deviceCount\": 3,\n  \"description\": \"Lab 2 demo\",\n  \"endingDate\": \"{{licenseEndingDate}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses"
+          }
+        },
+        {
+          "name": "07 POST /api/licenses/activate",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('200 activate', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.test('ticket', () => pm.expect(j.ticket).to.be.an('object'));",
+                "pm.test('signature', () => pm.expect(j.signatureBase64).to.be.a('string').and.not.empty);",
+                "pm.test('ticket userId', () => pm.expect(j.ticket.userId).to.eql(pm.collectionVariables.get('holderUserId')));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"deviceMac\": \"{{deviceMac}}\",\n  \"deviceName\": \"PC-Lab\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/activate"
+          }
+        },
+        {
+          "name": "08 POST /api/licenses/verify",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('200 verify', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.expect(j.ticket).to.exist;",
+                "pm.expect(j.signatureBase64).to.be.a('string');"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceMac\": \"{{deviceMac}}\",\n  \"productId\": \"{{productId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/verify"
+          }
+        },
+        {
+          "name": "09 POST /api/licenses/renew",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('200 renew + ticket', () => pm.response.to.have.status(200));",
+                "const j = pm.response.json();",
+                "pm.expect(j.ticket).to.exist;",
+                "pm.expect(j.signatureBase64).to.be.a('string');"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"extendDays\": 30\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/renew"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Аутентификация",
+      "item": [
+        {
+          "name": "Register admin",
+          "event": [{"listen": "test", "script": {"exec": ["if (pm.response.code===200){const j=pm.response.json();pm.collectionVariables.set('accessToken',j.accessToken);pm.collectionVariables.set('adminAccessToken',j.accessToken);pm.collectionVariables.set('refreshToken',j.refreshToken);}"]}}],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"{{authUsername}}\",\n  \"password\": \"{{authPassword}}\",\n  \"email\": \"{{authEmail}}\"\n}"},
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "Register user (ivan)",
+          "event": [{"listen": "test", "script": {"exec": ["if (pm.response.code===200){const j=pm.response.json();pm.collectionVariables.set('userAccessToken',j.accessToken);}"]}}],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"{{userUsername}}\",\n  \"password\": \"{{userPassword}}\",\n  \"email\": \"{{userEmail}}\"\n}"},
+            "url": "{{baseUrl}}/api/auth/register"
+          }
+        },
+        {
+          "name": "Login admin",
+          "event": [{"listen": "test", "script": {"exec": ["if (pm.response.code===200){const j=pm.response.json();pm.collectionVariables.set('accessToken',j.accessToken);pm.collectionVariables.set('adminAccessToken',j.accessToken);pm.collectionVariables.set('refreshToken',j.refreshToken);}"]}}],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"{{authUsername}}\",\n  \"password\": \"{{authPassword}}\"\n}"},
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Login user",
+          "event": [{"listen": "test", "script": {"exec": ["if (pm.response.code===200){const j=pm.response.json();pm.collectionVariables.set('userAccessToken',j.accessToken);}"]}}],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"{{userUsername}}\",\n  \"password\": \"{{userPassword}}\"\n}"},
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"},
+            "url": "{{baseUrl}}/api/auth/refresh"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Демо / роли",
+      "item": [
+        {
+          "name": "GET /api/me",
+          "event": [{"listen": "test", "script": {"exec": ["if(pm.response.code===200) pm.collectionVariables.set('holderUserId', pm.response.json().id);"]}}],
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/me"}
+        },
+        {"name": "GET /api/profile", "request": {"method": "GET", "url": "{{baseUrl}}/api/profile"}},
+        {
+          "name": "GET /api/admin/ping (ADMIN → 200)",
+          "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{adminAccessToken}}"}]},
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/admin/ping"}
+        },
+        {
+          "name": "GET /api/admin/ping (USER → 403)",
+          "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{userAccessToken}}"}]},
+          "request": {"method": "GET", "url": "{{baseUrl}}/api/admin/ping"}
+        }
+      ]
+    },
+    {
+      "name": "Каталог (ADMIN)",
+      "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{adminAccessToken}}"}]},
+      "item": [
+        {
+          "name": "POST product",
+          "event": [{"listen": "test", "script": {"exec": ["if(pm.response.code===200) pm.collectionVariables.set('productId', pm.response.json().id);"]}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Demo Antivirus\"\n}"},
+            "url": "{{baseUrl}}/api/admin/catalog/products"
+          }
+        },
+        {
+          "name": "POST license-type",
+          "event": [{"listen": "test", "script": {"exec": ["if(pm.response.code===200) pm.collectionVariables.set('licenseTypeId', pm.response.json().id);"]}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Standard\",\n  \"defaultDurationInDays\": 365,\n  \"description\": \"1 year\"\n}"},
+            "url": "{{baseUrl}}/api/admin/catalog/license-types"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Лицензии",
+      "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{holderAccessToken}}"}]},
+      "item": [
+        {
+          "name": "Create (ADMIN token)",
+          "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{adminAccessToken}}"}]},
+          "event": [
+            {"listen": "prerequest", "script": {"exec": ["const d=new Date();d.setDate(d.getDate()+5);pm.collectionVariables.set('licenseEndingDate',d.toISOString().slice(0,10));"]}},
+            {"listen": "test", "script": {"exec": ["if(pm.response.code===201){const j=pm.response.json();pm.collectionVariables.set('licenseCode',j.code);pm.collectionVariables.set('licenseId',j.id);}"]}}
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ownerId\": \"{{ownerUserId}}\",\n  \"productId\": \"{{productId}}\",\n  \"typeId\": \"{{licenseTypeId}}\",\n  \"deviceCount\": 3,\n  \"endingDate\": \"{{licenseEndingDate}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses"
+          }
+        },
+        {
+          "name": "Activate",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"deviceMac\": \"{{deviceMac}}\",\n  \"deviceName\": \"PC-Lab\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/activate"
+          }
+        },
+        {
+          "name": "Verify",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceMac\": \"{{deviceMac}}\",\n  \"productId\": \"{{productId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/verify"
+          }
+        },
+        {
+          "name": "Renew",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"extendDays\": 30\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/renew"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Устройства (опционально)",
+      "description": "В методичке устройство создаётся при activate по MAC. Этот endpoint — дополнительно.",
+      "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{holderAccessToken}}"}]},
+      "item": [
+        {
+          "name": "POST /api/devices",
+          "event": [{"listen": "test", "script": {"exec": ["if(pm.response.code===200) pm.collectionVariables.set('deviceId', pm.response.json().id);"]}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"PC-1\",\n  \"macAddress\": \"{{deviceMac}}\"\n}"},
+            "url": "{{baseUrl}}/api/devices"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Негативные примеры",
+      "description": "Сначала пройдите Е2Е или заполните licenseCode, productId. Для «чужой activate» — owner выпустил ключ, ivan пытается активировать.",
+      "item": [
+        {
+          "name": "Activate чужим пользователем (403)",
+          "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{userAccessToken}}"}]},
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"deviceMac\": \"AA:BB:CC:DD:EE:01\",\n  \"deviceName\": \"Alien-PC\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/activate"
+          }
+        },
+        {
+          "name": "Renew слишком рано (409)",
+          "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{holderAccessToken}}"}]},
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/licenses/renew"
+          },
+          "description": "Сработает 409, если endingDate > сегодня+7. После Е2Е с endingDate +5 — должен пройти renew в шаге 09; этот запрос — для лицензии с датой +365 при create без endingDate."
+        }
+      ]
+    }
+  ]
+}

@@ -6,8 +6,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 public record CreateLicenseRequest(
-        @NotNull UUID userId,
-        UUID ownerId,
+        @NotNull UUID ownerId,
         @NotNull UUID productId,
         @NotNull UUID typeId,
         @NotNull @Min(1) Integer deviceCount,

@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 import ru.ziovpo.backend.config.LicenseProperties;
 import ru.ziovpo.backend.license.dto.ActivateLicenseRequest;
@@ -19,7 +20,6 @@ import ru.ziovpo.backend.license.dto.LicenseTypeResponse;
 import ru.ziovpo.backend.license.dto.ProductResponse;
 import ru.ziovpo.backend.license.dto.RegisterDeviceRequest;
 import ru.ziovpo.backend.license.dto.RenewLicenseRequest;
-import ru.ziovpo.backend.license.dto.RenewLicenseResponse;
 import ru.ziovpo.backend.license.dto.VerifyLicenseRequest;
 import ru.ziovpo.backend.license.ticket.Ticket;
 import ru.ziovpo.backend.license.ticket.TicketResponse;
@@ -68,16 +68,12 @@ public class LicenseService {
 
     @Transactional
     public LicenseCreatedResponse createLicense(CreateLicenseRequest request, AppUserPrincipal actor) {
-        UserEntity holder = userRepository.findById(request.userId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Holder user not found"));
-        UserEntity owner = request.ownerId() != null
-                ? userRepository.findById(request.ownerId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Owner user not found"))
-                : holder;
+        UserEntity owner = userRepository.findById(request.ownerId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Owner user not found"));
         ProductEntity product = productRepository.findById(request.productId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Product not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
         LicenseTypeEntity type = licenseTypeRepository.findById(request.typeId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "License type not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "License type not found"));
 
         if (product.isBlocked()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Product is blocked");
@@ -85,7 +81,7 @@ public class LicenseService {
 
         LicenseEntity license = new LicenseEntity();
         license.setCode(generateUniqueCode());
-        license.setUser(holder);
+        license.setUser(null);
         license.setOwner(owner);
         license.setProduct(product);
         license.setType(type);
@@ -101,14 +97,15 @@ public class LicenseService {
 
     @Transactional
     public TicketResponse activate(ActivateLicenseRequest request, AppUserPrincipal actor) {
-        LicenseEntity license = licenseRepository.findDetailedByCode(request.code().trim())
+        String activationKey = request.activationKey().trim();
+        LicenseEntity license = licenseRepository.findDetailedByCode(activationKey)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found"));
-        ensureHolderOrAdmin(license, actor);
 
-        DeviceEntity device = deviceRepository.findById(request.deviceId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Device not found"));
-        if (!device.getUser().getId().equals(license.getUser().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Device does not belong to license holder");
+        UserEntity actorUser = userRepository.getReferenceById(actor.getId());
+        if (license.getUser() != null
+                && !license.getUser().getId().equals(actor.getId())
+                && !actor.isAdmin()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "License owned by another user");
         }
 
         if (license.isBlocked() || license.getProduct().isBlocked()) {
@@ -116,21 +113,29 @@ public class LicenseService {
         }
 
         LocalDate today = LocalDate.now();
+        String mac = request.deviceMac().trim();
+        DeviceEntity device = deviceRepository
+                .findByUser_IdAndMacAddressIgnoreCase(actor.getId(), mac)
+                .orElseGet(() -> createDevice(actorUser, mac, request.deviceName()));
 
-        if (license.getFirstActivationDate() == null
-                && license.getEndingDate() != null
-                && license.getEndingDate().isBefore(today)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "License ending date is already in the past");
-        }
-
-        if (license.getFirstActivationDate() == null) {
+        boolean firstActivation = license.getFirstActivationDate() == null;
+        if (firstActivation) {
+            if (license.getEndingDate() != null && license.getEndingDate().isBefore(today)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "License ending date is already in the past");
+            }
+            license.setUser(actorUser);
             license.setFirstActivationDate(today);
             if (license.getEndingDate() == null) {
                 license.setEndingDate(today.plusDays(license.getType().getDefaultDurationInDays()));
             }
             licenseRepository.save(license);
-        } else if (license.getEndingDate() != null && license.getEndingDate().isBefore(today)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "License has expired");
+        } else {
+            if (!license.getUser().getId().equals(actor.getId()) && !actor.isAdmin()) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "License owned by another user");
+            }
+            if (license.getEndingDate() != null && license.getEndingDate().isBefore(today)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "License has expired");
+            }
         }
 
         if (deviceLicenseRepository.existsByLicenseAndDevice(license, device)) {
@@ -139,7 +144,7 @@ public class LicenseService {
 
         long activeDevices = deviceLicenseRepository.countByLicense(license);
         if (activeDevices >= license.getDeviceCount()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Device limit reached for this license");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Device limit reached for this license");
         }
 
         DeviceLicenseEntity link = new DeviceLicenseEntity();
@@ -154,26 +159,19 @@ public class LicenseService {
 
     @Transactional
     public TicketResponse verify(VerifyLicenseRequest request, AppUserPrincipal actor) {
-        LicenseEntity license = licenseRepository.findDetailedByCode(request.code().trim())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found"));
-        ensureHolderOrAdmin(license, actor);
-
-        DeviceEntity device = deviceRepository.findById(request.deviceId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Device not found"));
-        if (!device.getUser().getId().equals(license.getUser().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Device does not belong to license holder");
-        }
-
-        deviceLicenseRepository.findByLicenseAndDevice(license, device)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "License is not active on this device"));
-
-        if (license.isBlocked() || license.getProduct().isBlocked()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "License or product is blocked");
-        }
+        String mac = request.deviceMac().trim();
+        DeviceEntity device = deviceRepository
+                .findByUser_IdAndMacAddressIgnoreCase(actor.getId(), mac)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Device not found"));
 
         LocalDate today = LocalDate.now();
-        if (license.getEndingDate() != null && license.getEndingDate().isBefore(today)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "License has expired");
+        LicenseEntity license = licenseRepository
+                .findActiveByDeviceUserAndProduct(
+                        device.getId(), actor.getId(), request.productId(), today)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found"));
+
+        if (license.getProduct().isBlocked()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Product is blocked");
         }
 
         appendHistory(license, actor.getId(), H_VERIFIED, "License verified");
@@ -181,10 +179,11 @@ public class LicenseService {
     }
 
     @Transactional
-    public RenewLicenseResponse renew(RenewLicenseRequest request, AppUserPrincipal actor) {
-        LicenseEntity license = licenseRepository.findDetailedByCode(request.code().trim())
+    public TicketResponse renew(RenewLicenseRequest request, AppUserPrincipal actor) {
+        LicenseEntity license = licenseRepository.findDetailedByCode(request.activationKey().trim())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found"));
-        ensureOwnerOrAdmin(license, actor);
+        ensureCanRenew(license, actor);
+        ensureRenewable(license);
 
         int days = request.extendDays() != null
                 ? request.extendDays()
@@ -197,17 +196,20 @@ public class LicenseService {
         licenseRepository.save(license);
 
         appendHistory(license, actor.getId(), H_RENEWED, "License renewed, +" + days + " days");
-        return new RenewLicenseResponse(license.getId(), license.getEndingDate());
+
+        UUID deviceId = deviceLicenseRepository
+                .findFirstByLicense_IdOrderByActivationDateDesc(license.getId())
+                .map(link -> link.getDevice().getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "License has no activated device for ticket"));
+
+        return ticketSignatureService.signToResponse(buildTicket(license, deviceId));
     }
 
     @Transactional
     public DeviceRegisteredResponse registerDevice(RegisterDeviceRequest request, AppUserPrincipal actor) {
         UserEntity user = userRepository.getReferenceById(actor.getId());
-        DeviceEntity device = new DeviceEntity();
-        device.setUser(user);
-        device.setName(request.name());
-        device.setMacAddress(request.macAddress());
-        deviceRepository.save(device);
+        DeviceEntity device = createDevice(user, request.macAddress().trim(), request.name());
         return new DeviceRegisteredResponse(device.getId(), device.getName(), device.getMacAddress());
     }
 
@@ -230,7 +232,18 @@ public class LicenseService {
         return new LicenseTypeResponse(t.getId(), t.getName(), t.getDefaultDurationInDays(), t.getDescription());
     }
 
+    private DeviceEntity createDevice(UserEntity user, String mac, String deviceName) {
+        DeviceEntity device = new DeviceEntity();
+        device.setUser(user);
+        device.setMacAddress(mac);
+        device.setName(StringUtils.hasText(deviceName) ? deviceName.trim() : "Device");
+        return deviceRepository.save(device);
+    }
+
     private Ticket buildTicket(LicenseEntity license, UUID deviceId) {
+        if (license.getUser() == null) {
+            throw new IllegalStateException("Cannot build ticket for license without activated user");
+        }
         long ttl = licenseProperties.getTicket().getTtlSeconds();
         return new Ticket(
                 Instant.now(),
@@ -263,21 +276,27 @@ public class LicenseService {
         throw new IllegalStateException("Could not allocate license code");
     }
 
-    private static void ensureHolderOrAdmin(LicenseEntity license, AppUserPrincipal actor) {
+    private static void ensureCanRenew(LicenseEntity license, AppUserPrincipal actor) {
         if (actor.isAdmin()) {
             return;
         }
-        if (!license.getUser().getId().equals(actor.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed for this license");
+        UUID actorId = actor.getId();
+        boolean owner = license.getOwner().getId().equals(actorId);
+        boolean holder = license.getUser() != null && license.getUser().getId().equals(actorId);
+        if (!owner && !holder) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to renew this license");
         }
     }
 
-    private static void ensureOwnerOrAdmin(LicenseEntity license, AppUserPrincipal actor) {
-        if (actor.isAdmin()) {
-            return;
+    private static void ensureRenewable(LicenseEntity license) {
+        if (license.getFirstActivationDate() == null || license.getUser() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "License is not activated yet");
         }
-        if (!license.getOwner().getId().equals(actor.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only license owner or admin can renew");
+        LocalDate today = LocalDate.now();
+        LocalDate end = license.getEndingDate();
+        if (end != null && end.isAfter(today.plusDays(7))) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Renewal is only allowed within 7 days of expiration");
         }
     }
 }

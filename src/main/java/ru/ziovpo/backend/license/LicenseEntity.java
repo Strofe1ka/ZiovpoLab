@@ -24,8 +24,8 @@ public class LicenseEntity {
     @Column(nullable = false, unique = true, length = 64)
     private String code;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
     private UserEntity user;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

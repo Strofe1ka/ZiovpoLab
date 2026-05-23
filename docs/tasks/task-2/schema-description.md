@@ -24,7 +24,7 @@
 
 ## Таблица `license`
 
-Выданная лицензия: уникальный `code`; `user_id` — держатель (кто активирует на своих устройствах); `owner_id` — владелец (например, покупатель, может продлевать); `product_id`, `type_id`; `first_activation_date` и `ending_date` (могут быть `NULL` до первой активации / явного задания); `blocked`; лимит устройств `device_count`; `description`.
+Выданная лицензия: уникальный `code` (activation key); `owner_id` — владелец (задаётся при создании администратором); `user_id` — пользователь, **активировавший** лицензию (`NULL` до первой активации); `product_id`, `type_id`; `first_activation_date` и `ending_date`; `blocked`; `device_count`; `description`.
 
 ## Таблица `device_license`
 

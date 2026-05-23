@@ -10,4 +10,6 @@ public interface DeviceLicenseRepository extends JpaRepository<DeviceLicenseEnti
     boolean existsByLicenseAndDevice(LicenseEntity license, DeviceEntity device);
 
     Optional<DeviceLicenseEntity> findByLicenseAndDevice(LicenseEntity license, DeviceEntity device);
+
+    Optional<DeviceLicenseEntity> findFirstByLicense_IdOrderByActivationDateDesc(UUID licenseId);
 }
